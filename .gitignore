@@ -1,0 +1,11 @@
+*.fa
+*.vcf
+*.bam
+*.c
+*.bai
+*.cns
+*.fq
+*.so
+*.pyc
+build
+.ipynb_checkpoints
