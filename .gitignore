@@ -1,3 +1,10 @@
+*.amb
+*.sa
+*.anb
+*.ann
+*.bwt
+*.fai
+*.pac
 *.fa
 *.vcf
 *.bam
