@@ -1,39 +1,54 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # coding: utf-8
 
 
+
+import sys
 import argparse
-
-parser = argparse.ArgumentParser(description='Supply reference fasta and bam file')
-parser.add_argument('ref',
-                    help='reference fasta')
-parser.add_argument('bam',
-                    help='bam file')
-parser.add_argument('contaminants',
-                    help='fasta with all possible contaminants', default='contaminants.fa')
-parser.add_argument('nIter',
-                    help='number of iteration mcmc', default=10000)
-
-
-args = parser.parse_args()
-ref_fname = args.ref
-bam_fname = args.bam
-genomes_fname = args.contaminants
-nIter = int(args.nIter)
-
-# import of all neccessary modules
 import os
 from collections import Counter
 import pysam
 import numpy as np
-from tqdm import tqdm
+from tqdm import tqdm, trange
 from scipy.special import binom
 import scipy.stats as st
 from Bio import SeqIO
 from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
 from multiprocess import Pool
-from gl_cont_cython import *
+from MN import *
+import subprocess
+import seaborn as sns
+import matplotlib.pyplot as plt
+
+if not len(sys.argv) > 1:
+    ref_fname = 'refchrm.fa'
+    bam_fname = 'simulated_data.bam'
+    genomes_fname = 'contaminants.fa'
+    nIter = 10000
+    chrom = 'chrM'
+else:
+    parser = argparse.ArgumentParser(description='Supply reference fasta and bam file')
+    parser.add_argument('ref',
+                        help='reference fasta')
+    parser.add_argument('bam',
+                        help='bam file')
+    parser.add_argument('contaminants',
+                        help='fasta with all possible contaminants', default='contaminants.fa')
+    parser.add_argument('nIter',
+                        help='number of iteration mcmc', default=10000)
+    parser.add_argument('chrom',
+                        help='number of iteration mcmc', default='chrM')
+    args = parser.parse_args()
+    ref_fname = args.ref
+    bam_fname = args.bam
+    genomes_fname = args.contaminants
+    nIter = int(args.nIter)
+    chrom = args.chrom
+
+if chrom not in ['chrM', 'chrY']:
+    raise Exception('Wrong chromosome')
+
 
 
 
@@ -75,13 +90,11 @@ def get_base_err(bam_fname, ref, aln_pos, same_set):
 def preprocess(ref_fname, genomes_fname, bam_fname):
     
     base = bam_fname[:-4]
+    pysam.index(bam_fname)
+    os.system(f"samtools view {bam_fname} {chrom} -o {base+'_{chrom}.bam'}")
+    base = base + f'_{chrom}'
     
-    pysam.index(bam_fname);
-    
-    os.system(f"samtools view {bam_fname} chrM -o {base+'_mt.bam'}")
-    base = base + '_mt'
-    
-    print('#EXTRACTING MTDNA OK')
+    print('#EXTRACTING {chrom} OK')
     
     # Один из вариантов получения консенсуса, работает не очень хорошо.
     '''consensus = bam2consensus(ref_fname, bam_fname)
@@ -98,11 +111,11 @@ def preprocess(ref_fname, genomes_fname, bam_fname):
     
     # os.system(f'cp genome_0.fa {base}.fa')
     
+    
     os.system(f'bcftools mpileup  -d 2000 -m 3 -C50 -q 30 -EQ 20 -f {ref_fname} {base}.bam | bcftools call -m --ploidy 1 > {base}.vcf')
-    os.system(f'perl CnsMaj3_1.pl -i {base}.vcf -o {base}.fa -l 16569 -cov 1 -diff 0.5 -idiff 0.5 -h {base} -callindels no > {base}.cns')
     
-    # return 0
-    
+    os.system(f'perl CnsMaj3_1.pl -i {base}.vcf -o {base}.fa -l 16569 -cov 1 -diff 0.5 -idiff 0.5 -h {base} -callindels no > {base}.cns') #TODO: change   
+
     print('#CONSENSUS IS READY')
     
     os.system(f'cat {base}.fa {genomes_fname} > {base}_genomes.fa'); # gather consensus and possible contaminants together
@@ -121,8 +134,9 @@ def preprocess(ref_fname, genomes_fname, bam_fname):
     # os.system(f'picard MarkDuplicates I={base}_ra.sort.bam O={base}_ra.sort.rmdup.bam METRICS_FILE=metrics.txt TMP_DIR=temp REMOVE_DUPLICATES=true ASSUME_SORTED=true ') #VALIDATION_STRINGENCY=LENIENT
     
     total_reads = int(pysam.view('-c', bam_fname))
+    
     need_reads = 64000
-    proportion = need_reads / total_reads
+    proportion = need_reads / total_reads #for tests only!
     # print(proportion)
 
     # -s {123+proportion}
@@ -137,9 +151,6 @@ def preprocess(ref_fname, genomes_fname, bam_fname):
     return bam_final, aligned_genomes
 
 
-# In[171]:
-
-
 def make_genomes_arr(genomes_fname):
     genomes = list()
     for record in SeqIO.parse(genomes_fname, "fasta"):
@@ -148,18 +159,12 @@ def make_genomes_arr(genomes_fname):
     return genomes_arr
 
 
-# In[172]:
-
-
 def get_same(genomes_arr):
     same_positions = []
     for i in range(genomes_arr.shape[1]):
         if len(np.unique(genomes_arr[:,i])) == 1:
             same_positions.append(i)
     return set(same_positions)
-
-
-# In[173]:
 
 
 def get_base_err(bam_fname, same_dict):
@@ -185,9 +190,6 @@ def get_base_err(bam_fname, same_dict):
     return base_err
 
 
-# In[174]:
-
-
 def get_aln_pos(reference):
     aln_coor = []
     for i in range(len(reference)):
@@ -197,22 +199,21 @@ def get_aln_pos(reference):
     return np.asarray(aln_coor)
 
 
-# In[175]:
-
-
 def do_mcmc(n_iterations = 50000, output_file='', n_threads=8, model=0, show_each=10):
+    p_list = list()
     if output_file != '':
         res = open(output_file,'w')
     num_reads, num_genomes  = MC.shape
     print(MC.shape)
     p = np.random.dirichlet([1]*num_genomes)
-    # pool = Pool(n_threads)
-    for i in tqdm(range(n_iterations) ):
+
+    iterations = trange(n_iterations, leave=True)
+    for i in iterations:
         
         func = lambda x: get_Zi(MC, p, base_err, x)
         
         # Z = np.array(pool.map_async(func, range(num_reads)).get())
-        Z = np.array([func(s) for s in range(num_reads) ])
+        Z = np.array([func(s) for s in range(num_reads) ], dtype=int)
         eta = get_eta(Z, num_genomes)
         if model == 0:
             p0 = np.random.beta(1 + eta[0],1+num_reads-eta[0])
@@ -223,73 +224,22 @@ def do_mcmc(n_iterations = 50000, output_file='', n_threads=8, model=0, show_eac
             p[1:] = p_other
         else:
             p = np.random.dirichlet(1+ eta)
-        if output_file != '':
-            res.write(f'iteration {i}')
-            res.write(str(p[0]))
-        if i % show_each == 0:
-            # print(p[0], p[1:].sum()) 
-            print(p)
-    # pool.close()
-    if output_file != '':
-        res.close()
-    return p
-
-
-# In[176]:
+        p_list.append(p[0])
+        iterations.set_description(f'contamination is {1-p[0]}')
+    return p_list
 
 
 bam, genomes = preprocess(ref_fname, genomes_fname, bam_fname)
 
-
-
-
-
-# In[178]:
-
-
 genomes_arr = make_genomes_arr(genomes)
-
-
-
-
-# In[184]:
-
 
 same = get_same(genomes_arr)
 
-
-# In[185]:
-
-
 genomes0 = (''.join( np.array(genomes_arr, dtype = str)[0])).upper()
-
-# In[188]:
-
 
 aln_coords = get_aln_pos(genomes0)
 
-
-
-
-# In[190]:
-
-
 M, N, base_err = get_MN(genomes_arr, bam, aln_coords, same)
-
-
-
-
-
-# In[198]:
-
-
-
-
-
-# При большой ошибке большое число ридов не картируется, из-за чего точность оценки base_error падаеты
-
-
-# In[201]:
 
 
 for i in range(M.shape[0]): # [Предпологаем сильные ошибки]
@@ -299,22 +249,13 @@ for i in range(M.shape[0]): # [Предпологаем сильные ошиб�
             N[i, j] = -1
 
 
-# In[203]:
-
-
 print(f'#base error is {base_err}')
-
-
 MC = get_mc(M, N, base_err)
-
-
-# In[207]:
-
-
 idx = np.where((MC[:,0]!=MC[:,1]))[0] # Так можно?
 MC = MC[idx]
+P = do_mcmc(nIter, n_threads=1, model=1)
+os.system('make clean')
 
-# In[4]
+sns.kdeplot(P)
+plt.show()
 
-
-P = do_mcmc(nIter, n_threads=1, model=1, show_each=10)

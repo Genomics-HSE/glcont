@@ -326,7 +326,7 @@ def get_Zi(double[:,::1] mc, double[::1] p,double eps, long i):
 @cython.cdivision(True)
 @cython.wraparound(False)
 @cython.boundscheck(False)
-def get_eta(long[:] z,int num_genomes):
+def get_eta(long[:] z, int num_genomes):
     '''
     create vector eta
     eta[j] is number of reads that were predicted to be from j-th genome 

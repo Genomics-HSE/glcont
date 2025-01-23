@@ -56,6 +56,7 @@ def preprocess(ref_fname, genomes_fname, bam_fname):
     # os.system(f'picard MarkDuplicates I={base}_ra.sort.bam O={base}_ra.sort.rmdup.bam METRICS_FILE=metrics.txt TMP_DIR=temp REMOVE_DUPLICATES=true ASSUME_SORTED=true ') #VALIDATION_STRINGENCY=LENIENT
     
     total_reads = int(pysam.view('-c', bam_fname))
+    
     need_reads = 64000
     proportion = need_reads / total_reads
     # print(proportion)
