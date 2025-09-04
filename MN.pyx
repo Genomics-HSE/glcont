@@ -10,13 +10,12 @@ import numpy as np
 from cython.parallel import prange
 from libc.math cimport pow
 from scipy.special import binom
-
+import logging
 # Считывает число картированных ридов
 # returns number of mapped reads
 def get_num_reads(str bam_fname):
     ''''
     This function calculate mapped reads
-    
     '''
     samfile = pysam.AlignmentFile(bam_fname, "rb")
     num_reads = 0
@@ -26,66 +25,11 @@ def get_num_reads(str bam_fname):
     samfile.close()
     return num_reads
 
-
-def bam2consensus(bam_fname, double ac_threshold=0, double af_threshold=0):
-    '''
-    NOW UNUSED
-    Make consensus fasta
-    
-    Parameters:
-        ref_name : str
-        path to a file with reference
-        bam_fname : str
-        path to a bam file
-        ac_threshold : float
-        af_threshold : float
-        
-    '''
-    cdef str consensus = ''
-    cdef int max_count, total_count
-    cdef str allele
-    cdef str max_allele
-   
-        # consensus = "N" * len(record)
-
-    with pysam.AlignmentFile(bam_fname, "rb") as bam:
-        allele_counter = Counter()
-        for pileup_column in tqdm(bam.pileup(), total=16569, desc = 'consensus dna'):
-            assert pileup_column.reference_name == 'chrM'
-            pos = pileup_column.reference_pos
-
-            allele_counter.clear()
-            for pileup_read in pileup_column.pileups:
-                if pileup_read.is_del:
-                    allele = "-"
-                else:
-                    allele = pileup_read.alignment.query_sequence[
-                        pileup_read.query_position]
-                allele_counter[allele] += 1
-
-            max_allele = "N"
-            max_count, total_count = 0, 0
-            for allele, count in allele_counter.items():
-                if count > max_count:
-                    max_count = count
-                    max_allele = allele
-                total_count += count
-
-            assert max_allele in "ACGTN-"
-            if (max_count >= ac_threshold and
-                max_count / total_count >= af_threshold):
-                consensus += max_allele
-            else:
-                consensus += 'N'
-
-    return consensus.replace('-', '')
-
-
-#Produces matrices M and N described in article
+#Produces matrices M and N
 @cython.cdivision(True)
 @cython.wraparound(False)
 @cython.boundscheck(True)
-def get_MN(char[:, :] genomes,str bam_fname, long[:] aln_coords, same, trunc = 0, verbosity = False):
+def get_MN(char[:, :] genomes,str bam_fname, long[:] aln_coords, same, int trunc = 0, verbosity = False, str chrom = 'chrM'):
     '''
     Make matrices and base error for the method.
     
@@ -107,6 +51,7 @@ def get_MN(char[:, :] genomes,str bam_fname, long[:] aln_coords, same, trunc = 0
 
     
     '''
+    
     bam = pysam.AlignmentFile(bam_fname, "rb")
     cdef double[:, :] M, N
     cdef int k, i, j, pos, offset
@@ -121,67 +66,75 @@ def get_MN(char[:, :] genomes,str bam_fname, long[:] aln_coords, same, trunc = 0
     M = np.zeros((num_reads, num_genomes))
     i = 0
     j = 0
-    # print(0)
-    for read in tqdm(bam.fetch('chrM'), total = bam.count(), desc = 'MN tables'):
-        # print(1)
-        if not read.is_mapped:
-            # print(2)
+    f = open(f'{bam_fname}.mn', 'w')
+    # for read in tqdm(bam.fetch(chrom), total = bam.count(), desc = 'MN tables'): 
+    for read in bam.fetch(chrom):
+
+        if not read.is_mapped: # Убираем некартированные риды
             continue
             
-        seq = read.query_sequence
-        pos = read.reference_start
-        
+        seq = read.query_sequence  # Рид
+        pos = read.reference_start # Позиция начала рида
         if read.cigartuples[0][0] == 4: #read is soft clipped
             left_trim = read.cigartuples[0][1]
             seq = seq[left_trim:]
             
-        # if read.cigartuples[-1][0] == 4: #read is soft clipped
-        #     right_trim = read.cigartuples[-1][1]
-        #     seq = seq[:-right_trim]
+        if read.cigartuples[-1][0] == 4: #read is soft clipped
+            right_trim = read.cigartuples[-1][1]
+            seq = seq[:-right_trim]
         # IDK should i use it because in my data there is no softclip to the right
         
         oldest_pos = pos
-        
         qual = read.query_qualities
         
         ins_pos = 0
         
         for j in range(num_genomes):
+            ins_pos = 0
             if "I" in read.cigarstring: # Check for indels
+                # print('insertion')
                 if j == 0:
+                    # pass
                     # print('INDEL')
                     M[i, j] = -1
                     N[i, j] = -1
-                else:
-                    cigar = read.cigartuples
-
-                    for m in range(len(cigar)):
-                        if cigar[m][0] == 1:
-                            for s in range(m):
-                                ins_pos += cigar[s][1]
-                            break
+                    continue
+                # else:
+                #     cigar = read.cigartuples
+                    
+                #     for m in range(len(cigar)):
+                #         if cigar[m][0] == 1:
+                #             for s in range(m):
+                #                 ins_pos += cigar[s][1]
+                #             break
                             
-                    # if pos + ins_pos < genomes.shape[1] and chr(genomes[s, aln_coords[pos] + ins_pos]) != seq[aln_coords[pos]+ins_pos]:
-                    #     M[i, j] = -1
-                    #     N[i, j] = -1
+                #     if pos + ins_pos < genomes.shape[1] and chr(genomes[j, pos + ins_pos]) != seq[ins_pos] :
+                #         M[i, j] = -1
+                #         N[i, j] = -1
+                #         continue
             
             
-            
+            ins_pos = 0
             if "D" in read.cigarstring: # Check for indels
+                # print('deletion')
                 if j == 0:
-                    M[i, j] = -1
-                    N[i, j] = -1
-                else: # пока нуждается в доработке но посмотрим
-                    cigar = read.cigartuples
-                    ins_pos = 0
-                    for m in range(len(cigar)):
-                        if cigar[m][0] == 1:
-                            for s in range(m):
-                                ins_pos += cigar[s][1]
-                            # break
-                    # if chr(genomes[s, aln_coords[pos+ins_pos]]) != '-':
-                    #     M[i, j] = -1
-                    #     N[i, j] = -1
+                    
+                    # pass
+                    M[i, j] = -2
+                    N[i, j] = -2
+                    continue
+                # else: # пока нуждается в доработке но посмотрим
+                #     cigar = read.cigartuples
+        
+                #     for m in range(len(cigar)):
+                #         if cigar[m][0] == 2:
+                #             for s in range(m):
+                #                 ins_pos += cigar[s][1]
+                #             break
+                #     if pos + ins_pos < genomes.shape[1] and chr(genomes[j, aln_coords[pos]+ins_pos]) != '-':
+                #         M[i, j] = -2
+                #         N[i, j] = -2
+                #         continue
                         
 
                         
@@ -201,8 +154,8 @@ def get_MN(char[:, :] genomes,str bam_fname, long[:] aln_coords, same, trunc = 0
                     if chr(genomes[j, aln_coords[pos] + k + offset]).upper() == '-' and chr(genomes[0, aln_coords[pos] + k + offset]).upper() == '-':
                         offset += 1
                     
-                    elif chr(genomes[j, aln_coords[pos] + k + offset]).upper() == '-':
-                        if 'D' not in read.cigarstring:
+                    elif chr(genomes[j, aln_coords[pos] + k + offset]).upper() == '-' and chr(genomes[0, aln_coords[pos] + k + offset]).upper() != '-':
+                        if 'D' not in read.cigarstring and j!=0:
                             M[i, j] = -1
                             N[i, j] = -1
                             break
@@ -210,27 +163,31 @@ def get_MN(char[:, :] genomes,str bam_fname, long[:] aln_coords, same, trunc = 0
                             correct += 1
                             offset += 1 
                         
-                    elif chr(genomes[0, aln_coords[pos] + k + offset]).upper() == '-':
-                        if 'I' not in read.cigarstring:
-                            M[i, j] = -1
-                            N[i, j] = -1
+                    elif chr(genomes[0, aln_coords[pos] + k + offset]).upper() == '-' and chr(genomes[j, aln_coords[pos] + k + offset]).upper() != '-':
+                        if 'I' not in read.cigarstring and j!=0:
+                            M[i, j] = -3
+                            N[i, j] = -3
                             break
                         else:
+                            # offset += 1
                             break
+                            # pass
                     if k + pos + offset >= genomes.shape[1]:
                         break
                             
                     # print(pos + k + offset)
                 
-                if chr(genomes[j, aln_coords[pos] + k + offset]).upper() == 'N' or seq[k] == 'N':
-                    # correct += 0.25
-                    # incorrect += 0.75
-                    # correct +=1
-                    #TODO: DECIDE WHETHER WE SHOULD UASE IT
+                if chr(genomes[0, aln_coords[pos] + k + offset]).upper() == 'N' or chr(genomes[j, aln_coords[pos] + k + offset]).upper() == 'N'  or seq[k].upper() == 'N':
+                        # correct += 0.25
+                        # incorrect += 0.75
                     pass
+                    # correct +=1
+                    #TODO: DECIDE WHETHER WE SHOULD USE IT
+                        # pass
                                 
                 elif seq[k] == chr(genomes[j, aln_coords[pos] + k + offset]).upper(): #means that read has same base with j genome
                     P_cor = 1 - 10**(- qual[k]/10)
+                    # P_cor = 1
                     correct += P_cor
                     incorrect += 1 - P_cor
                     if verbosity:
@@ -242,7 +199,9 @@ def get_MN(char[:, :] genomes,str bam_fname, long[:] aln_coords, same, trunc = 0
                 else:
                     # print(seq[k], chr(genomes[j][k+pos]).upper()) #means that read has same difference with j genome
                     P_cor = (10**(- qual[k]/10))/3
+                    # P_cor = 0
                     incorrect += 1 - P_cor
+                    # print("incorrect")
                     correct += P_cor
                     if verbosity:
                         debug_str += f'{seq[k]}, {chr(genomes[j][aln_coords[pos] + k + offset]).upper()} => -1\n'
@@ -253,21 +212,35 @@ def get_MN(char[:, :] genomes,str bam_fname, long[:] aln_coords, same, trunc = 0
                         base_incorr += 1
                         
 
-            if M[i, j] != -1:
+            if M[i, j]>=0:
                 M[i, j] = correct
                 N[i, j] = incorrect
+            #     if M[i, j] < N[i, j]:
+            #         print('ERROR',i, j, seq, oldest_pos, pos, debug_str, M[i, j], N[i, j])
 
                 
                 
             # print("total:", M[i,j],N[i,j], sep='\n')
-            if verbosity:
-                if M[i, j] < N[i, j] and pos != 0:
-                    print('ERROR',i, j, seq, oldest_pos, pos, debug_str, M[i, j], N[i, j])
+            # if verbosity:
+                # if M[i, j] < N[i, j] and pos != 0:
+                    # print('ERROR',i, j, seq, oldest_pos, pos, debug_str, M[i, j], N[i, j])
                 
-        
+        # print(f'{len(read.query_alignment_sequence)}, {M[i, 0]}, {M[i,1]}, {read.query_name} {read.query_sequence}, {read.cigarstring}, {"".join(np.array(genomes[0, aln_coords[oldest_pos]:aln_coords[oldest_pos]+k+3], dtype=str))}, {"".join(np.array(genomes[1, aln_coords[oldest_pos]:aln_coords[oldest_pos]+k+3], dtype=str))}')
+
+        # if (M[i,0]<0 or M[i, 1]<0):
+            # print(f'{len(read.query_alignment_sequence)}, {M[i, 0]}, {M[i,1]}, {read.query_name} {read.query_sequence}, {read.cigarstring}, {"".join(np.array(genomes[0, aln_coords[oldest_pos]:aln_coords[oldest_pos]+k+3], dtype=str))}, {"".join(np.array(genomes[1, aln_coords[oldest_pos]:aln_coords[oldest_pos]+k+3], dtype=str))}')
+        if M[i, j] <  N[i, j] and M[i, 0]>=0:
+            logging.warning(f'M[{i},{j}]<N[{i},{j}], {len(read.query_alignment_sequence)}, {M[i, j]}, {N[i,j]}, {read.query_name} {read.query_sequence}, {read.cigarstring}, {"".join(np.array(genomes[0, aln_coords[oldest_pos]:aln_coords[oldest_pos]+k+3], dtype=str))}, {"".join(np.array(genomes[1, aln_coords[oldest_pos]:aln_coords[oldest_pos]+k+3], dtype=str))}')
+        if np.round(N[i,0]) > 0.0 or np.round((N[i, 1])) > 0.0 or np.round((M[i,0])) < 100.0 or np.round((M[i,1])) < 100.0:
+            print(read.query_name, np.round(M[i, 0]), np.round(N[i, 0]), np.round(M[i, 1]), np.round(N[i, 1]), file=f)
+        #print(read.query_name, M[i, 0], N[i, 0], M[i, 1], N[i, 1])
+        if read.query_name == 'm244/100/CCS':
+            logging.warning(read.query_name)
+          #  // print(read.query_sequence)
+            logging.warning(f'M[{i},{j}]<N[{i},{j}], {len(read.query_alignment_sequence)}, {M[i, j]}, {N[i,j]}, {read.query_name} {read.query_sequence}, {read.cigarstring}, {"".join(np.array(genomes[0, aln_coords[oldest_pos]:aln_coords[oldest_pos]+k+3], dtype=str))}, {"".join(np.array(genomes[1, aln_coords[oldest_pos]:aln_coords[oldest_pos]+k+3], dtype=str))}')
         i += 1
-        
     bam.close()
+    f.close()
     cdef double base_err = base_incorr / base_total
     return np.array(M, dtype=np.float64), np.array(N, dtype=np.float64), base_err
 
@@ -289,7 +262,10 @@ def get_mc(double[:, ::1] m, double[:, ::1] n, double eps):
             if m[i, j] == -1:
                 mc[i, j] = 0
             else:
-                mc[i, j] = binom(m[i, j] + n[i, j], m[i, j]) * (1 - eps)**(m[i, j]) * eps**n[i, j]
+                if eps != 0:
+                    mc[i, j] = binom(m[i, j] + n[i, j], m[i, j]) * (1 - eps)**(m[i, j]) * eps**n[i, j]
+                else:
+                    mc[i, j] = binom(np.round(m[i, j] + n[i, j]),np.round( m[i, j])) * (1 - eps)**(np.round(m[i, j])) * eps**np.round(n[i, j])
     return np.asarray(mc)
     
 
@@ -423,7 +399,7 @@ def get_glM(char[:, :] genomes,str bam_fname, long[:] aln_coords, same, trunc = 
             
         seq = read.query_sequence
         pos = read.reference_start
-        
+        print(read.query_name)
         if read.cigartuples[0][0] == 4: #read is soft clipped
             left_trim = read.cigartuples[0][1]
             seq = seq[left_trim:]
@@ -437,9 +413,10 @@ def get_glM(char[:, :] genomes,str bam_fname, long[:] aln_coords, same, trunc = 
         
         qual = read.query_qualities
         
-        ins_pos = 0
+        
         
         for j in range(num_genomes):
+            ins_pos = 0
             if "I" in read.cigarstring: # Check for indels
                 if j == 0:
                     # print('INDEL')
@@ -453,9 +430,10 @@ def get_glM(char[:, :] genomes,str bam_fname, long[:] aln_coords, same, trunc = 
                                 ins_pos += cigar[s][1]
                             break
                             
-                    # if pos + ins_pos < genomes.shape[1] and chr(genomes[s, aln_coords[pos] + ins_pos]) != seq[aln_coords[pos]+ins_pos]:
-                    #     M[i, j] = -1
-                    #     N[i, j] = -1
+                    if pos + ins_pos < genomes.shape[1] and chr(genomes[s, aln_coords[pos] + ins_pos]) != seq[aln_coords[pos]+ins_pos]:
+                        pass
+                        # M[i, j] = -1
+                        # N[i, j] = -1
             
             
             
@@ -466,7 +444,7 @@ def get_glM(char[:, :] genomes,str bam_fname, long[:] aln_coords, same, trunc = 
                     cigar = read.cigartuples
                     ins_pos = 0
                     for m in range(len(cigar)):
-                        if cigar[m][0] == 1:
+                        if cigar[m][0] == 2:
                             for s in range(m):
                                 ins_pos += cigar[s][1]
                             # break
@@ -509,8 +487,8 @@ def get_glM(char[:, :] genomes,str bam_fname, long[:] aln_coords, same, trunc = 
                     # print(pos + k + offset)
                 
                 if chr(genomes[j, aln_coords[pos] + k + offset]).upper() == 'N' or seq[k] == 'N':
-                    # correct += 0.25
-                    # incorrect += 0.75
+                    #correct += 0.25
+                    #incorrect += 0.75
                     # correct +=1
                     pass
                                 

@@ -1,6 +1,11 @@
 # Makefile for deleting files with "chrM" or "chrY" in their names
 
-.PHONY: clean
+all build_ext clean
+
+all: build_ext
+
+build_ext:
+	python3 setup.py build_ext --inplace
 
 clean:
 	@echo "Deleting files containing 'chrM' or 'chrY' in their names..."

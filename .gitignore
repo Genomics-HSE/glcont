@@ -16,3 +16,13 @@
 *.pyc
 build
 .ipynb_checkpoints
+*summary*
+*fasta/*
+*results
+*.bam
+*Results/
+*simulations/*
+*X2b5*
+*X2b6*
+*N.txt
+*M.txt

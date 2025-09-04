@@ -1,1 +1,0 @@
-rm *bai *aligned* *_mt*

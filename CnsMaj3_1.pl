@@ -295,7 +295,7 @@ if($HETNR==1 && $alt ne "\."){
 
 ##
 print "The final size is: $genomesize\n";
-print OUT "\>chrM\n";
+print OUT "\>$opts{h}\n";
 #for($i=0; $i<$genomesize; $i++){
 #	print "Si estoy entrando\n";
 #	print OUT "$CNS[$i]";
