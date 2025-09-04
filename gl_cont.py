@@ -251,8 +251,10 @@ def run_glcont(ref_fname, genomes_fname, bam_fname, n_iterations=10000, chrom='c
     # base_err = get_base_err1(bam, genomes0, aln_coords, same)[2]
     base_err = get_mean_base_calling_error(bam)
     # base_err = 0.000
-    np.savetxt('M.txt', M)
-    np.savetxt('N.txt', N)
+    basename = os.path.basename(bam_fname)[:-4]
+    base = f'Results/{basename}/'
+    np.savetxt(f'{base}.M.txt', M)
+    np.savetxt(f'{base}.N.txt', N)
     
     
     idx = np.where((M[:,0]!=M[:,1]))[0] # Так можно?
