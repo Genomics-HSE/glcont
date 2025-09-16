@@ -23,13 +23,8 @@ def get_mean_base_calling_error(bam_fname):
     N_bases = 0
     Sum_of_errors = 0
     for readId, read in enumerate(bam.fetch('chrM')):
-<<<<<<< HEAD
         if  read.is_unmapped or 'D' in read.cigarstring or 'I' in read.cigarstring:
-=======
-        if  read.unmapped or 'D' in read.cigarstring or 'I' in read.cigarstring:
->>>>>>> 6c3c4c5 (pysam update to support old versions)
             continue
-        
         q_scores = read.query_qualities
         for q in q_scores:
             Sum_of_errors += 10**(- q/10)
@@ -44,11 +39,7 @@ def get_base_err1(bam_fname, ref, aln_pos, same_set):
     incorrect = 0
     for readId, read in enumerate(bam.fetch('chrM')):
         
-<<<<<<< HEAD
         if not read.is_unmapped or 'D' in read.cigarstring or 'I' in read.cigarstring:
-=======
-        if read.is_unmapped or 'D' in read.cigarstring or 'I' in read.cigarstring:
->>>>>>> 6c3c4c5 (pysam update to support old versions)
             continue
         
         seq = read.query_sequence
