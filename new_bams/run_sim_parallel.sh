@@ -10,13 +10,13 @@ command -v parallel >/dev/null 2>&1 || {
 }
 
 PAIRS_TXT="$1"
-JOBS="${JOBS:-8}"
+JOBS="${JOBS:-16}"
 
 folder=$(basename "$PAIRS_TXT" .samples.txt)
 mkdir -p "$folder"
 
 # Skip header row if present
-tail -n +2 "$PAIRS_TXT" | while IFS=, read -r loc1 sample1 loc2 sample2; do
+tail "$PAIRS_TXT" | while IFS=, read -r loc1 sample1 loc2 sample2; do
   # Build inputs
   bam1="${loc1}/mtdna_bams/${sample1}.final.bam"
   bam2="${loc2}/mtdna_bams/${sample2}.final.bam"

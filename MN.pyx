@@ -1,10 +1,6 @@
 from tqdm import tqdm
 import pysam
-from Bio import SeqIO
-from Bio.Seq import Seq
-from Bio.SeqRecord import SeqRecord
 from collections import Counter
-from IPython.display import clear_output
 cimport cython
 import numpy as np
 from cython.parallel import prange
@@ -20,7 +16,7 @@ def get_num_reads(str bam_fname):
     samfile = pysam.AlignmentFile(bam_fname, "rb")
     num_reads = 0
     for read in samfile.fetch('chrM'):
-        if read.is_mapped:
+        if not read.is_unmapped:
             num_reads += 1
     samfile.close()
     return num_reads
@@ -70,7 +66,7 @@ def get_MN(char[:, :] genomes,str bam_fname, long[:] aln_coords, same, int trunc
     # for read in tqdm(bam.fetch(chrom), total = bam.count(), desc = 'MN tables'): 
     for read in bam.fetch(chrom):
 
-        if not read.is_mapped: # Убираем некартированные риды
+        if read.is_unmapped: # Убираем некартированные риды
             continue
             
         seq = read.query_sequence  # Рид
@@ -229,10 +225,10 @@ def get_MN(char[:, :] genomes,str bam_fname, long[:] aln_coords, same, int trunc
 
         # if (M[i,0]<0 or M[i, 1]<0):
             # print(f'{len(read.query_alignment_sequence)}, {M[i, 0]}, {M[i,1]}, {read.query_name} {read.query_sequence}, {read.cigarstring}, {"".join(np.array(genomes[0, aln_coords[oldest_pos]:aln_coords[oldest_pos]+k+3], dtype=str))}, {"".join(np.array(genomes[1, aln_coords[oldest_pos]:aln_coords[oldest_pos]+k+3], dtype=str))}')
-        if M[i, j] <  N[i, j] and M[i, 0]>=0:
-            logging.warning(f'M[{i},{j}]<N[{i},{j}], {len(read.query_alignment_sequence)}, {M[i, j]}, {N[i,j]}, {read.query_name} {read.query_sequence}, {read.cigarstring}, {"".join(np.array(genomes[0, aln_coords[oldest_pos]:aln_coords[oldest_pos]+k+3], dtype=str))}, {"".join(np.array(genomes[1, aln_coords[oldest_pos]:aln_coords[oldest_pos]+k+3], dtype=str))}')
-        if np.round(N[i,0]) > 0.0 or np.round((N[i, 1])) > 0.0 or np.round((M[i,0])) < 100.0 or np.round((M[i,1])) < 100.0:
-            print(read.query_name, np.round(M[i, 0]), np.round(N[i, 0]), np.round(M[i, 1]), np.round(N[i, 1]), file=f)
+        #if M[i, j] <  N[i, j] and M[i, 0]>=0:
+         #   logging.warning(f'M[{i},{j}]<N[{i},{j}], {len(read.query_alignment_sequence)}, {M[i, j]}, {N[i,j]}, {read.query_name} {read.query_sequence}, {read.cigarstring}, {"".join(np.array(genomes[0, aln_coords[oldest_pos]:aln_coords[oldest_pos]+k+3], dtype=str))}, {"".join(np.array(genomes[1, aln_coords[oldest_pos]:aln_coords[oldest_pos]+k+3], dtype=str))}')
+        # if np.round(N[i,0]) > 0.0 or np.round((N[i, 1])) > 0.0 or np.round((M[i,0])) < 100.0 or np.round((M[i,1])) < 100.0:
+            # print(read.query_name, np.round(M[i, 0]), np.round(N[i, 0]), np.round(M[i, 1]), np.round(N[i, 1]), file=f)
         #print(read.query_name, M[i, 0], N[i, 0], M[i, 1], N[i, 1])
         if read.query_name == 'm244/100/CCS':
             logging.warning(read.query_name)
@@ -394,7 +390,7 @@ def get_glM(char[:, :] genomes,str bam_fname, long[:] aln_coords, same, trunc = 
     j = 0
     for read in tqdm(bam.fetch('chrM'), total = bam.count(), desc = 'MN tables'):
         
-        if not read.is_mapped:
+        if  read.is_unmapped:
             continue
             
         seq = read.query_sequence
