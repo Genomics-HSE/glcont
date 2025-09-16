@@ -49,3 +49,5 @@ new_bams/IBS/download_list.txt
 new_bams/IBS/.DS_Store
 new_bams/.DS_Store
 .DS_Store
+in1.vcf.gz
+cns.py.save
