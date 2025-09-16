@@ -9,17 +9,25 @@ preprocess() {
     local chrom="${4:-chrM}"
     local consensus="${5:-samtools}"
     local nIter="${5:-5000}"
-    local burn_in="${5:-5}"
+    local burn_in="${6:-5}"
+    local model="${7:-0}"
     
     local filepath="$bam_fname"
     local basename=$(basename "$bam_fname" .bam)
-    
+    if [[ "$consensus" == *.fa ]]; then
+        consensus1="true"
+    else
+        consensus1="$consensus"
+    fi  
     # Create directory if it doesn't exist
-    if [ ! -d "Results/$basename" ]; then
-        mkdir -p "Results/$basename"
-    fi
+    # if [ ! -d "Results/$basename" ]; then
+    #     # mkdir -p "Results/$basename"
+    #     mkdir -p "Results/${basename}_${consensus1}_model${model}" #for analysis only
+    # fi
+    mkdir -p "Results/${basename}_${consensus1}_model${model}" #for analysis only
+
     
-    local base="Results/$basename/${basename}_${chrom}"
+    local base="Results/${basename}_${consensus1}_model${model}/${basename}_${chrom}"
     
     # Create log file
     > "${base}.log"
@@ -216,7 +224,7 @@ echo "Consensus method: $consensus"
 echo "Burn-in: $burn_in"
 
 
-preprocess ${ref_fname} ${contaminants_fname} ${bam_fname} ${chrom} $consensus $nIter
+preprocess ${ref_fname} ${contaminants_fname} ${bam_fname} ${chrom} $consensus $nIter $model
 
 # Example of how to use these variables with the preprocess function from previous example
 # preprocess "$ref_fname" "$contaminants_fname" "$bam_fname" "$chrom" "$consensus"
