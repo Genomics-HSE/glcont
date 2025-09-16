@@ -41,7 +41,7 @@ preprocess() {
             bcftools consensus -f "$ref_fname" "${base}.vcf.gz" > "${base}.fa"
             ;;
         "contamix")
-            bcftools mpileup -d 2000 -m 3 -C50 -q 30 -EQ 20 -f "$ref_fname" "${base}.bam" | bcftools call -Oz -m --ploidy 1 > "${base}.vcf.gz"
+            bcftools mpileup -d 2000 -m 3 -C50 -q 30 -EQ 20 -f "$ref_fname" "${base}.bam" | bcftools call -Oz -m --ploidy 1 > "${base}.vcf"
             perl CnsMaj3_1.pl -i "${base}.vcf" -o "${base}.fa" -l 16569 -cov 1 -diff 0.5 -idiff 0.5 -h chrM -callindels no > "${base}.cns"
             ;;
         "mpileup")
