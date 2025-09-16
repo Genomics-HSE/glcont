@@ -1,0 +1,5 @@
+ftp://ftp.sra.ebi.ac.uk/vol1/run/ERR323/ERR3239496/NA18544.final.cram
+ftp://ftp.sra.ebi.ac.uk/vol1/run/ERR323/ERR3239501/NA18559.final.cram
+ftp://ftp.sra.ebi.ac.uk/vol1/run/ERR323/ERR3239503/NA18596.final.cram
+ftp://ftp.sra.ebi.ac.uk/vol1/run/ERR323/ERR3239510/NA18612.final.cram
+ftp://ftp.sra.ebi.ac.uk/vol1/run/ERR323/ERR3239515/NA18618.final.cram

@@ -19,7 +19,7 @@ def plot_compare(depth, second_haplogroup):
     plt.figure(figsize=(30, 10))
     ax = plt.subplot(1,4,1)
     for i, model in enumerate(models):
-        for j, cons in enumerate(['contamix']):
+        for j, cons in enumerate(['mpileup']):
             y = get_glcont(second_haplogroup, cons, model)
             mean = np.mean(y[depths[depth]], axis=0)
             std = np.std(y[depths[depth]], axis=0)
@@ -41,7 +41,7 @@ def plot_compare(depth, second_haplogroup):
 #         plot_compare(d, h)
             
     # %%
-second_haplogroup = 'X2b6'
-depth = 30
+second_haplogroup = 'I1c1a'
+depth = 5
 plot_compare(depth, second_haplogroup)    
 # %%

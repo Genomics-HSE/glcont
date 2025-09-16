@@ -2,6 +2,8 @@
 
 """
 # José Víctor Moreno Mayar <morenomayar@gmail.com> #
+Переписанны на Python 3
+оригинальный скрипт cns_maj.pl
 """
 
 import sys

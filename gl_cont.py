@@ -22,7 +22,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import arviz
 from statsmodels.tsa.stattools import acf as autocorr
-from contamsim import generate
+# from contamsim import generate
 import logging
 import subprocess
 
@@ -253,8 +253,8 @@ def run_glcont(ref_fname, genomes_fname, bam_fname, n_iterations=10000, chrom='c
     # base_err = 0.000
     basename = os.path.basename(bam_fname)[:-4]
     base = f'Results/{basename}/'
-    np.savetxt(f'{base}.M.txt', M)
-    np.savetxt(f'{base}.N.txt', N)
+    np.savetxt(f'{base}M.txt', M)
+    np.savetxt(f'{base}N.txt', N)
     
     
     idx = np.where((M[:,0]!=M[:,1]))[0] # Так можно?
@@ -291,6 +291,48 @@ def run_glcont(ref_fname, genomes_fname, bam_fname, n_iterations=10000, chrom='c
     return np.array(P)
 
 
+def run_glcont_new(bam_fname, genomes_fname, n_iterations=10000, output="Results", chrom='chrM', model = 1, consensus='samtools', show_time=False):
+    if chrom not in ['chrM', 'chrY']:
+        raise Exception('Wrong chromosome')
+    print(bam_fname)
+    genomes_arr = make_genomes_arr(genomes_fname)
+    same = get_same(genomes_arr)
+    genomes0 = (''.join( np.array(genomes_arr, dtype = str)[0])).upper()
+    aln_coords = get_aln_pos(genomes0)
+    M, N, base_err = get_MN(genomes_arr, bam_fname, aln_coords, same, chrom=chrom)
+    base_err = get_mean_base_calling_error(bam_fname)
+    basename = os.path.basename(f"{bam_fname}").split('.')[0]
+    # print(f'!{basename}')
+    # base = f'Results/{basename}/'
+    # print(f'!{base}')
+    np.savetxt(f'{output}/M.txt', M)
+    np.savetxt(f'{output}/N.txt', N)
+
+
+    idx = np.where((M[:,0]!=M[:,1]))[0] # Так можно?
+    M = M[idx]
+    N = N[idx]
+
+
+
+    logging.info(f"M<N: {(M<N).sum()}")
+
+    MC = get_mc(M, N, base_err)
+
+
+    idx = np.where((MC[:,0]!=MC[:,1]))[0] # Так можно?
+    MC = MC[idx]
+    logging.info(f'{base_err=}')
+
+
+    P = do_mcmc(MC, base_err,  n_iterations, n_threads=1, model=model, show_time=show_time)
+    endo_p = np.array(P)[:,0]
+    with open(f'{bam_fname[:-4]}.results','w') as f:
+        print(f'Mean,q-5,q-95', file=f)
+        print(f'{np.mean(endo_p)},{np.quantile(endo_p, 0.05)}, {np.quantile(endo_p, 0.95)}', file=f)
+    return np.array(P)
+
+
 def neff(arr):
     n = len(arr)
     acf = autocorr(arr, nlags=n, fft=True)
@@ -301,33 +343,35 @@ def neff(arr):
 # else:
     # m
 def main():
-    if not len(sys.argv) > 1:
-        ref_fname = 'rCRS.fa'
-        bam_fname =  f'simulations/X2b5_I1c1a/X2b5_I1c1a_cov_30_80_v10.bam'
-        genomes_fname = 'fasta/I1c1a.fasta'
-        nIter = 10000
-        chrom = 'chrM'
-    else:
-        parser = argparse.ArgumentParser(description='Supply reference fasta and bam file')
-        parser.add_argument('ref',
-                            help='reference fasta')
-        parser.add_argument('bam',
-                            help='bam file')
-        parser.add_argument('contaminants',
-                            help='fasta with all possible contaminants', default='contaminants.fa')
-        parser.add_argument('nIter',
-                            help='number of iteration mcmc', default=10000)
-        parser.add_argument('chrom',
-                            help='number of iteration mcmc', default='chrM')
-        args = parser.parse_args()
-        ref_fname = args.ref
-        bam_fname = args.bam
-        genomes_fname = args.contaminants
-        nIter = int(args.nIter)
-        chrom = args.chrom
-    print("filename = ", bam_fname)
-    P = run_glcont(ref_fname, genomes_fname, bam_fname, n_iterations=10000, chrom='chrM', model=0, consensus='mpileup', show_time=False)
-    print("Proportion is: ", np.mean(P[1000::5,0]))
+    parser = argparse.ArgumentParser(description='Supply reference fasta and bam file')
+    parser.add_argument('--bam',
+                        help='bam file')
+    parser.add_argument('--genomes',
+                        help='fasta consensus + contaminants', default='contaminants.fa')
+    parser.add_argument('--nIter',
+                        help='number of iteration mcmc', default=5000)
+    parser.add_argument('--chrom',
+                        help='number of iteration mcmc', default='chrM')
+    parser.add_argument('--model',
+                        help='model 0 or 1', default=0)
+    parser.add_argument('--burn_in',
+                        help='burn_in period', default=5)
+    parser.add_argument('--output',
+                         help='where to put files', default='Results')
+    args = parser.parse_args()
+    # ref_fname = args.ref
+    bam_fname = args.bam
+    genomes_fname = args.genomes
+    chrom = args.chrom
+    nIter = int(args.nIter)
+    chrom = args.chrom
+    model = int(args.model)
+    burn_in = int(args.burn_in)
+    output = args.output
+    P = run_glcont_new(bam_fname, genomes_fname, output=output, n_iterations=nIter, chrom=chrom, model=model, consensus='mpileup', show_time=False)
+    endo_prop_mean = np.mean(P[int(nIter/10)::burn_in,0])
+    print(endo_prop_mean)
+    
 if __name__ == '__main__':
     # P = run_glcont(ref_fname, genomes_fname, bam_fname, n_iterations=10000, chrom='chrM', model=0, true_endo=None, show_time=False)
     # generate(0.55)
