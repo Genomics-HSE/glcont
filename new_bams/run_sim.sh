@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# creates simulated data
 # Usage: ./run_pairs.sh pairs.csv
 
 set -euo pipefail

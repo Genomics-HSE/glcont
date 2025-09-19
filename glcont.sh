@@ -26,7 +26,7 @@ preprocess() {
     # fi
     mkdir -p "Results/${basename}_${consensus1}_model${model}" #for analysis only
 
-    
+    local folder="Results/${basename}_${consensus1}_model${model}"
     local base="Results/${basename}_${consensus1}_model${model}/${basename}_${chrom}"
     
     # Create log file
@@ -68,7 +68,7 @@ preprocess() {
     esac
     
     # Copy consensus file with consensus method in name
-    cp "${base}.fa" "${base}_${consensus}.fa"
+    # cp "${base}.fa" "${base}_${consensus1}.fa"
     
     echo "#CONSENSUS IS READY"
     
@@ -106,7 +106,7 @@ preprocess() {
     
     echo "#BAM FILE IS READY"
     # python3 gl_cont.py --help
-   python3 gl_cont.py  --bam ${bam_final} --genomes ${aligned_genomes} --output "Results/$basename" # --nIter ${nIter} --chrom ${chrom} --model ${model} --burn_in ${burn_in}
+   python3 gl_cont.py  --bam ${bam_final} --genomes ${aligned_genomes} --output "$folder" --model ${model} # --nIter ${nIter} --chrom ${chrom}  --burn_in ${burn_in}
     
     echo "$bam_final,$aligned_genomes"
 
