@@ -13,8 +13,11 @@
 *.cns
 *.fq
 *.so
+*.out
 *.pyc
 build
+*.html
+contamix
 .ipynb_checkpoints
 *summary*
 *fasta/*
